@@ -52,4 +52,9 @@ public class ImageController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
+    @PostMapping("/upload-to-api")
+    public ResponseEntity<ImageEntity> uploadImageToApi(@RequestParam("file") MultipartFile file, @RequestParam("apiUrl") String apiUrl) {
+        ImageEntity savedImage = imageService.uploadImageToApi(file, apiUrl);
+        return ResponseEntity.ok(savedImage);
+    }
 }

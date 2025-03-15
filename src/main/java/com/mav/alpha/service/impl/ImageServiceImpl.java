@@ -11,7 +11,13 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
-
+import org.springframework.http.MediaType;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -69,22 +75,27 @@ public class ImageServiceImpl implements ImageService {
             throw new RuntimeException("Изображение не найдено с ID: " + id);
         }
     }
-
     @Override
     public ImageEntity uploadImageToApi(MultipartFile file, String apiUrl) {
+        // Проверка на то, что файл является изображением
+        if (file.isEmpty() || !isImageFile(file)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Загружаемый файл должен быть изображением.");
+        }
+
         try {
             // Сохраняем файл на диск
             String filename = file.getOriginalFilename();
             Path filepath = Paths.get(uploadDir + filename);
             Files.write(filepath, file.getBytes());
 
-            // Отправляем файл на внешний API
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", new org.springframework.core.io.FileSystemResource(filepath.toFile()));
+
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA);
-            HttpEntity<MultipartFile> requestEntity = new HttpEntity<>(file, headers);
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
             ResponseEntity<String> response = restTemplate.exchange(apiUrl, HttpMethod.POST, requestEntity, String.class);
 
-            // Предполагаем, что ответ содержит метаданные в формате JSON
             String metadata = response.getBody();
 
             // Сохраняем метаданные в БД
@@ -96,9 +107,13 @@ public class ImageServiceImpl implements ImageService {
 
             return imageRepository.save(imageEntity);
         } catch (IOException e) {
-            throw new RuntimeException("Ошибка при сохранении изображения", e);
+            throw new RuntimeException("Ошибка при сохранении изображения или отправке на API", e);
         } catch (Exception e) {
             throw new RuntimeException("Ошибка при отправке изображения на API", e);
         }
+    }
+    private boolean isImageFile(MultipartFile file) {
+        String contentType = file.getContentType();
+        return contentType != null && (contentType.startsWith("image/"));
     }
 }
